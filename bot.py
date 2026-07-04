@@ -1,14 +1,11 @@
 import os
 import logging
 import io
-import json
 import requests
-from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-import re
-import base64
 from urllib.parse import quote
+import base64
 
 # Enable logging
 logging.basicConfig(
@@ -20,7 +17,10 @@ logger = logging.getLogger(__name__)
 # Get bot token from Railway environment variables
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 if not TOKEN:
+    logger.error("TELEGRAM_BOT_TOKEN environment variable not set!")
     raise ValueError("TELEGRAM_BOT_TOKEN environment variable not set!")
+
+logger.info(f"Bot token loaded successfully")
 
 # Dictionary to store user session data
 user_sessions = {}
@@ -64,15 +64,16 @@ async def shorten_url(update: Update, url: str) -> None:
                 f"📎 **Short:** {short_url}\n\n"
                 f"✨ Use /shorten to shorten another URL."
             )
-        else:
-            # Fallback to custom shortening
-            short_code = base64.b64encode(url.encode())[:8].decode()
-            await update.message.reply_text(
-                f"✅ **URL Shortened!**\n\n"
-                f"🔗 **Original:** {url}\n"
-                f"📎 **Short:** https://artspark.link/{short_code}\n\n"
-                f"✨ Use /shorten to shorten another URL."
-            )
+            return
+
+        # Fallback: Generate a simple short code
+        short_code = base64.b64encode(url.encode())[:8].decode().replace('/', '_')
+        await update.message.reply_text(
+            f"✅ **URL Shortened!**\n\n"
+            f"🔗 **Original:** {url}\n"
+            f"📎 **Short:** https://artspark.link/{short_code}\n\n"
+            f"✨ Use /shorten to shorten another URL."
+        )
 
     except Exception as e:
         logger.error(f"Error shortening URL: {e}")
@@ -130,7 +131,7 @@ async def generate_ai_image(update: Update, prompt: str) -> None:
             "💡 Tip: Try a shorter or more specific prompt."
         )
 
-# ============ IMAGE CONVERTER (Using CloudConvert API) ============
+# ============ IMAGE CONVERTER ============
 
 async def convert_image(update: Update, file_id: str, target_format: str) -> None:
     """Convert an image using a free online API."""
@@ -145,9 +146,6 @@ async def convert_image(update: Update, file_id: str, target_format: str) -> Non
         file = await update.message.bot.get_file(file_id)
         image_bytes = await file.download_as_bytearray()
 
-        # Use a free image conversion API (ConvertAPI)
-        # For now, provide user with conversion options
-        
         await update.message.reply_text(
             f"✅ **Image Conversion Feature**\n\n"
             f"📁 **Requested format:** {target_format.upper()}\n"
@@ -156,7 +154,6 @@ async def convert_image(update: Update, file_id: str, target_format: str) -> Non
             f"• https://cloudconvert.com/\n"
             f"• https://convertio.co/\n"
             f"• https://www.iloveimg.com/\n\n"
-            f"📤 Or forward your image to @ImageConverterBot\n\n"
             f"📝 **Note:** Full integration coming soon!"
         )
 
@@ -181,7 +178,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🎨 **/generate** - Generate images with AI\n"
         "🖼️ **/convert** - Convert images between formats\n"
         "🆘 **/help** - Show this menu\n\n"
-        "💡 **Quick start:** Click a button below or send a command!"
+        "💡 **Quick start:** Click a button below!"
     )
 
     # Create inline keyboard menu
@@ -212,7 +209,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/generate - Generate AI images\n"
         "/convert - Convert images\n"
         "/help - Show this menu\n"
-        "/about - About this bot\n\n"
+        "/about - About this bot\n"
+        "/cancel - Cancel current operation\n\n"
         "**🚀 Quick Start Guide:**\n\n"
         "**1. URL Shortening**\n"
         "• Type /shorten\n"
@@ -225,8 +223,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "**3. Image Conversion**\n"
         "• Type /convert\n"
         "• Choose format\n"
-        "• Upload image\n\n"
-        "💡 **Tip:** You can also click the buttons below!"
+        "• Upload image"
     )
     await update.message.reply_text(help_text)
 
@@ -237,8 +234,7 @@ async def shorten_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "Please send me the URL you want to shorten.\n\n"
         "📝 **Example:**\n"
         "`https://www.example.com/very-long-url`\n\n"
-        "✅ Valid URLs start with `http://` or `https://`\n\n"
-        "⚡ I'll send you a short link instantly!"
+        "✅ Valid URLs start with `http://` or `https://`"
     )
     user_id = update.effective_user.id
     user_sessions[user_id] = {'mode': 'awaiting_url'}
@@ -251,7 +247,6 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             InlineKeyboardButton("✨ Creative Art", callback_data='generate_creative')
         ],
         [
-            InlineKeyboardButton("🖼️ Style Transfer", callback_data='generate_style'),
             InlineKeyboardButton("↩️ Back to Menu", callback_data='back_to_menu')
         ]
     ]
@@ -260,11 +255,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(
         "🎨 **AI Image Generator**\n\n"
         "Create amazing images using AI!\n\n"
-        "🔮 **Features:**\n"
-        "• Generate from text descriptions\n"
-        "• Creative digital artwork\n"
-        "• Style transfer\n\n"
-        "🚀 **How to use:**\n"
+        "🔮 **How to use:**\n"
         "1. Click an option below\n"
         "2. Describe your vision\n"
         "3. Wait for AI to create\n\n"
@@ -284,7 +275,6 @@ async def convert_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             InlineKeyboardButton("HEIC → JPG", callback_data='convert_heic_jpg')
         ],
         [
-            InlineKeyboardButton("🔄 All Formats", callback_data='convert_all'),
             InlineKeyboardButton("↩️ Back to Menu", callback_data='back_to_menu')
         ]
     ]
@@ -296,8 +286,7 @@ async def convert_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "📤 Then upload the image you want to convert.\n"
         "✅ Supports multiple formats!\n\n"
         "📊 **Supported formats:**\n"
-        "PNG, JPG, JPEG, WebP, HEIC, GIF, BMP\n\n"
-        "⚠️ **Note:** For best results, use high-quality images.",
+        "PNG, JPG, JPEG, WebP, HEIC, GIF, BMP",
         reply_markup=reply_markup
     )
 
@@ -310,20 +299,27 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "🏗️ **Built with:** Python + Telegram Bot API\n"
         "🚀 **Deployed on:** Railway\n\n"
         "**✨ Features:**\n"
-        "✅ URL Shortener (3 services)\n"
-        "✅ AI Image Generation (Pollinations.ai)\n"
-        "✅ Image Converter (Coming Soon)\n"
-        "✅ Interactive Menu\n"
-        "✅ Fast & Reliable\n\n"
-        "**📊 Stats:**\n"
-        "• Uptime: 99.9%\n"
-        "• Response time: < 2s\n"
-        "• Users: Growing community\n\n"
-        "**📧 Support:** @ArtSparkSupport\n"
-        "**⭐ GitHub:** github.com/artspark/ArtSpark8Bot\n\n"
+        "✅ URL Shortener\n"
+        "✅ AI Image Generation\n"
+        "🔄 Image Converter (Coming Soon)\n"
+        "✅ Interactive Menu\n\n"
         "Made with ❤️ for the Telegram community"
     )
     await update.message.reply_text(about_text)
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cancel the current operation."""
+    user_id = update.effective_user.id
+    if user_id in user_sessions:
+        user_sessions[user_id] = {}
+        await update.message.reply_text(
+            "✅ **Operation cancelled!**\n\n"
+            "You're back to the main menu. Use /start to begin again."
+        )
+    else:
+        await update.message.reply_text(
+            "❌ You don't have any active operation to cancel."
+        )
 
 # ============ MESSAGE HANDLER ============
 
@@ -373,8 +369,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Default response for unknown messages
     await update.message.reply_text(
         "🤔 I'm not sure what you want me to do with that.\n\n"
-        "Try using the **/start** command to see all available features!\n"
-        "Or click the menu buttons below."
+        "Try using the **/start** command to see all available features!"
     )
 
 # ============ BUTTON CLICK HANDLER ============
@@ -391,9 +386,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text(
             "🔗 **URL Shortener**\n\n"
             "Please send me the URL you want to shorten.\n\n"
-            "📝 **Example:**\n"
-            "`https://www.example.com/very-long-url`\n\n"
-            "✅ I'll send you back a short link instantly!"
+            "📝 **Example:** `https://www.example.com/very-long-url`"
         )
         user_sessions[user_id] = {'mode': 'awaiting_url'}
 
@@ -404,7 +397,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 InlineKeyboardButton("✨ Creative Art", callback_data='generate_creative')
             ],
             [
-                InlineKeyboardButton("🖼️ Style Transfer", callback_data='generate_style'),
                 InlineKeyboardButton("↩️ Back to Menu", callback_data='back_to_menu')
             ]
         ]
@@ -415,11 +407,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "💡 **Tips for best results:**\n"
             "• Be descriptive in your prompt\n"
             "• Mention style, colors, and mood\n"
-            "• Keep it under 100 characters for speed\n"
-            "• Use specific art styles (e.g., 'cyberpunk', 'watercolor')\n\n"
-            "🚀 **Let's get creative!**",
+            "• Keep it under 100 characters",
             reply_markup=reply_markup
         )
+
+    elif data in ['generate_text', 'generate_creative']:
+        await query.edit_message_text(
+            "🎨 **AI Image Generation**\n\n"
+            "Please describe what you want me to create:\n\n"
+            "📝 **Example prompts:**\n"
+            "• \"A serene sunset over mountains with golden clouds\"\n"
+            "• \"A cyberpunk cityscape with neon lights\"\n"
+            "• \"A cute cat wearing a wizard hat, digital art\""
+        )
+        user_sessions[user_id] = {'mode': 'awaiting_prompt'}
 
     elif data == 'convert':
         keyboard = [
@@ -432,44 +433,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 InlineKeyboardButton("HEIC → JPG", callback_data='convert_heic_jpg')
             ],
             [
-                InlineKeyboardButton("🔄 All Formats", callback_data='convert_all'),
                 InlineKeyboardButton("↩️ Back to Menu", callback_data='back_to_menu')
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "🖼️ **Image Converter**\n\n"
-            "Select a conversion format above, then upload your image:\n\n"
-            "✅ **Supported formats:**\n"
-            "PNG, JPG, JPEG, WebP, HEIC\n\n"
-            "📤 Just send me a photo or image file!",
+            "Select a conversion format above, then upload your image:",
             reply_markup=reply_markup
         )
-
-    elif data in ['generate_text', 'generate_creative', 'generate_style']:
-        mode_map = {
-            'generate_text': 'standard',
-            'generate_creative': 'creative',
-            'generate_style': 'style_transfer'
-        }
-        mode = mode_map.get(data, 'standard')
-        
-        await query.edit_message_text(
-            f"🎨 **AI Image Generation**\n\n"
-            f"Mode: **{mode.replace('_', ' ').title()}**\n\n"
-            "Please describe what you want me to create:\n\n"
-            "📝 **Example prompts:**\n"
-            "• \"A serene sunset over mountains with golden clouds\"\n"
-            "• \"A cyberpunk cityscape with neon lights\"\n"
-            "• \"A cute cat wearing a wizard hat, digital art\"\n"
-            "• \"Anime style portrait of a warrior\"\n\n"
-            "✨ Be creative and specific!\n"
-            "🔄 Type /cancel to go back."
-        )
-        user_sessions[user_id] = {
-            'mode': 'awaiting_prompt',
-            'generation_mode': mode
-        }
 
     elif data.startswith('convert_'):
         format_parts = data.split('_')
@@ -482,60 +454,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text(
                 f"🔄 **Image Conversion:** {source} → {target}\n\n"
                 f"Please upload the image you want to convert.\n\n"
-                f"📤 Send a photo or image file.\n"
-                f"🖼️ I'll convert it to {target} format.\n\n"
-                f"💡 Tip: Send the highest quality image available."
+                f"📤 Send a photo or image file."
             )
             user_sessions[user_id] = {
                 'mode': 'awaiting_image',
-                'target_format': target,
-                'source_format': source
+                'target_format': target
             }
-
-    elif data == 'convert_all':
-        await query.edit_message_text(
-            "🔄 **All Format Converter**\n\n"
-            "Send me any image and I'll convert it to your desired format!\n\n"
-            "📤 Upload your image now\n"
-            "💬 Then tell me the format you want\n\n"
-            "✅ **Supported:** PNG, JPG, JPEG, WebP, HEIC, BMP, GIF\n"
-            "📊 Max file size: 20MB"
-        )
-        user_sessions[user_id] = {'mode': 'awaiting_all_convert'}
 
     elif data == 'help':
         help_text = (
             "🆘 **ArtSpark8Bot Help**\n\n"
-            "**📋 Commands:**\n"
+            "**Commands:**\n"
             "/start - Show main menu\n"
             "/shorten - Shorten a URL\n"
             "/generate - Generate AI images\n"
             "/convert - Convert images\n"
             "/help - Show this menu\n"
-            "/about - About this bot\n\n"
-            "**🚀 Quick Start:**\n"
-            "1. Click a button below\n"
-            "2. Follow the instructions\n"
-            "3. Get your result!\n\n"
-            "**❓ Need help?**\n"
-            "Contact: @ArtSparkSupport"
+            "/about - About this bot"
         )
         await query.edit_message_text(help_text)
 
     elif data == 'about':
-        about_text = (
+        await query.edit_message_text(
             "📢 **About ArtSpark8Bot**\n\n"
-            "🤖 **Version:** 2.5.0\n"
-            "👨‍💻 **Developer:** ArtSpark Team\n"
-            "🚀 **Deployed on:** Railway\n\n"
-            "**✨ Features:**\n"
+            "🤖 Version: 2.5.0\n"
+            "👨‍💻 Developer: ArtSpark Team\n"
+            "🚀 Deployed on Railway\n\n"
+            "**Features:**\n"
             "✅ URL Shortener\n"
             "✅ AI Image Generation\n"
-            "🔄 Image Converter (Coming Soon)\n"
-            "✅ Interactive Menu\n\n"
-            "Made with ❤️ for the Telegram community"
+            "🔄 Image Converter (Coming Soon)"
         )
-        await query.edit_message_text(about_text)
 
     elif data == 'back_to_menu':
         keyboard = [
@@ -554,29 +503,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "🎨 **Welcome to ArtSpark8Bot!**\n\n"
-            "Choose an option below to get started:",
+            "Choose an option below:",
             reply_markup=reply_markup
-        )
-
-    else:
-        await query.edit_message_text(
-            "❓ I don't recognize that option. Please use /start to see the main menu."
-        )
-
-# ============ CANCEL COMMAND ============
-
-async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Cancel the current operation."""
-    user_id = update.effective_user.id
-    if user_id in user_sessions:
-        user_sessions[user_id] = {}
-        await update.message.reply_text(
-            "✅ **Operation cancelled!**\n\n"
-            "You're back to the main menu. Use /start to begin again."
-        )
-    else:
-        await update.message.reply_text(
-            "❌ You don't have any active operation to cancel."
         )
 
 # ============ ERROR HANDLER ============
@@ -587,8 +515,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update and update.effective_message:
         await update.effective_message.reply_text(
             "⚠️ **An unexpected error occurred.**\n\n"
-            "Please try again later or contact support.\n"
-            "Type /start to return to the main menu."
+            "Please try again later or contact support."
         )
 
 # ============ MAIN FUNCTION ============
@@ -596,9 +523,11 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 def main() -> None:
     """Start the bot."""
     try:
+        logger.info("🚀 Starting ArtSpark8Bot...")
+        
         # Create the Application
         application = Application.builder().token(TOKEN).build()
-
+        
         # Register command handlers
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
@@ -607,7 +536,7 @@ def main() -> None:
         application.add_handler(CommandHandler("convert", convert_command))
         application.add_handler(CommandHandler("about", about_command))
         application.add_handler(CommandHandler("cancel", cancel_command))
-
+        
         # Register message handler for text and photos
         application.add_handler(MessageHandler(
             filters.TEXT & ~filters.COMMAND, 
@@ -617,24 +546,20 @@ def main() -> None:
             filters.PHOTO | filters.Document.IMAGE,
             handle_message
         ))
-
+        
         # Register button callback handler
         application.add_handler(CallbackQueryHandler(button_callback))
-
+        
         # Register error handler
         application.add_error_handler(error_handler)
-
-        # Start the bot (polling mode - works with Railway)
-        logger.info("🚀 ArtSpark8Bot started successfully!")
-        logger.info("🤖 Bot is running and ready to serve!")
-        logger.info(f"📊 Bot username: @ArtSpark8Bot")
         
-        # Start polling
+        # Start the bot
+        logger.info("🤖 Bot is starting polling...")
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True
         )
-
+        
     except Exception as e:
         logger.error(f"Failed to start bot: {e}")
         raise
