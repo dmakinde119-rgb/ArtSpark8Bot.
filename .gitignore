@@ -10,19 +10,26 @@ ENV/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Environment variables
 .env
 .env.local
+.env.*.local
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # Railway
 .railway/
+railway.json
 
 # Logs
 *.log
+logs/
